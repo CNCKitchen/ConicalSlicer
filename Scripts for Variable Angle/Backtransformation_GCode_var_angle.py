@@ -13,7 +13,7 @@ def main():
 
 
 def parseArgs():
-    parser = argparse.ArgumentParser(description='Transform STL 3D models for conical slicing.')
+    parser = argparse.ArgumentParser(description='Backtransforms gcode file generated from a transformed STL.')
 
     DEF_ANGLE = 16.0
     DEF_CONE_TYPE = 'outward'
