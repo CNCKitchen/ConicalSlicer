@@ -1,26 +1,43 @@
 import numpy as np
 from stl import mesh
 import time
+import argparse
 
+def main():
 
-#-----------------------------------------------------------------------------------------
-# Transformation Settings
-#-----------------------------------------------------------------------------------------
+    args = parseArgs()
 
-FILE_NAME = 'tower_01_-20'                       # Filename without extension
-FOLDER_NAME_UNTRANSFORMED = 'stl/'
-FOLDER_NAME_TRANSFORMED = 'stl_transformed/'    # Make sure this folder exists
-CONE_ANGLE = 16                                 # Transformation angle
-REFINEMENT_ITERATIONS = 1                       # refinement iterations of the stl. 2-3 is a good start for regular stls. If its already uniformaly fine, use 0 or 1. High number cause huge models and long script runtimes
-TRANSFORMATION_TYPE = 'outward'                 # type of the cone: 'inward' & 'outward'
+    startTime = time.time()
+    transformed_STL = transformation_STL_file(path=args.src.name, cone_type=args.coneType, cone_angle_deg=args.angle, nb_iterations=args.iterations)
+    transformed_STL.save(args.dst.name)
+    deltaTime = time.time() - startTime
+    print(f'Transformation time: {deltaTime}')
 
+def parseArgs():
+    parser = argparse.ArgumentParser(description='Transform STL 3D models for conical slicing.')
 
-def transformation_kegel(points, cone_angle_rad, cone_type):
+    DEF_ANGLE = 16.0
+    DEF_CONE_TYPE = 'outward'
+    DEF_ITEREATIONS = 2
+    
+    parser.add_argument('-s', '--src', dest='src', help='Input file path', required=True, type=argparse.FileType('r'))
+    parser.add_argument('-d', '--dst', dest='dst', help='Output file path', required=True, type=argparse.FileType('w'))
+    parser.add_argument('-a', '--angle', dest='angle', help=f'Transformation angle. Defaut {DEF_ANGLE}.', default=DEF_ANGLE, type=float)
+    parser.add_argument('-t', '--type', dest='coneType', help=f'Type of the cone. Default {DEF_CONE_TYPE}.', default=DEF_CONE_TYPE, type=str, choices=['outward', 'inward'])
+    parser.add_argument('-i', '--iterations', dest='iterations', help=f'Refinement iterations of the STL. 2-3 for regular STLs. Use 0 or 1 if uniformally fine. Large numbers cause huge models and long runtimes. Default {DEF_ITEREATIONS}.', type=int, default=DEF_ITEREATIONS)
+    
+    args = parser.parse_args()
+
+    return args
+
+def transformation_kegel(points, cone_angle_rad: float, cone_type: str):
     """
     Computes the cone-transformation (x', y', z') = (x / cos(angle), y / cos(angle), z + \sqrt{x^{2} + y^{2}} * tan(angle))
     for a list of points
     :param points: array
         array of points of shape ( , 3)
+    :param cone_angle_rad: float
+        TODO: description missing
     :param cone_type: string
         String, either 'outward' or 'inward', defines which transformation should be used
     :return: array
@@ -59,7 +76,7 @@ def refinement_four_triangles(triangle):
     return np.array([triangle1, triangle2, triangle3, triangle4])
 
 
-def refinement_triangulation(triangle_array, num_iterations):
+def refinement_triangulation(triangle_array, num_iterations: int):
     """
     Compute a refinement of a triangulation using the refinement_four_triangles function.
     The number of iteration defines, how often the triangulation has to be refined; n iterations lead to
@@ -78,14 +95,14 @@ def refinement_triangulation(triangle_array, num_iterations):
     return refined_array
 
 
-def transformation_STL_file(path, cone_type, cone_angle_deg, nb_iterations):
+def transformation_STL_file(path: str, cone_type: str, cone_angle_deg: float, nb_iterations: int):
     """
     Read a stl-file, refine the triangulation and transform it according to the cone-transformation
     :param path: string
         path to the stl file
     :param cone_type: string
         String, either 'outward' or 'inward', defines which transformation should be used
-    :param cone_angle: int
+    :param cone_angle_deg: float
         angle to transform the part
     :param nb_iterations: int
         number of iterations, the triangulation should be refined before the transformation
@@ -104,8 +121,5 @@ def transformation_STL_file(path, cone_type, cone_angle_deg, nb_iterations):
     my_mesh_transformed = mesh.Mesh(my_mesh_transformed)
     return my_mesh_transformed
 
-startzeit = time.time()
-transformed_STL = transformation_STL_file(path=FOLDER_NAME_UNTRANSFORMED + FILE_NAME + '.stl', cone_type=TRANSFORMATION_TYPE, cone_angle_deg=CONE_ANGLE, nb_iterations=REFINEMENT_ITERATIONS)
-transformed_STL.save(FOLDER_NAME_TRANSFORMED + FILE_NAME + '_' + TRANSFORMATION_TYPE + '_' + str(CONE_ANGLE) + 'deg_transformed.stl')
-endzeit = time.time()
-print('Transformation time:', endzeit - startzeit)
+if __name__ == '__main__':
+    main()
