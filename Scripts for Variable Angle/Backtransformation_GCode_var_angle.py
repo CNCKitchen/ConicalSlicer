@@ -1,17 +1,28 @@
 import re
 import numpy as np
 import time
+import json
 
 # -----------------------------------------------------------------------------------------
 # Transformation Settings
 # -----------------------------------------------------------------------------------------
-FILE_NAME = 'tower_01_B.gcode'      # filename including extension
-FOLDER_NAME = 'gcodes/'                              # name of the subfolder in which the gcode is located
-CONE_ANGLE = 16                                      # transformation angle
-CONE_TYPE = 'outward'                                # type of the cone: 'inward' & 'outward'
-FIRST_LAYER_HEIGHT = 0.2                            # moves all the gcode up to this height. Use also for stacking
-X_SHIFT = 110                                       # moves your gcode away from the origin into the center of the bed (usually bed size / 2)
-Y_SHIFT = 90
+with open('settings.json', 'r') as f:
+    settings = json.load(f)
+    
+FILE_NAME = settings['gcodeName'] # filename including extension
+FOLDER_NAME = settings['gcodeFolder'] # name of the subfolder in which the gcode is located
+FOLDER_NAME_BACKTRANSFORMED = settings['gcodeBacktransformedFolder']
+CONE_ANGLE = settings['coneAngle'] # transformation angle, negative for inward
+CONE_TYPE = 'outward'
+if CONE_ANGLE < 0:
+    CONE_ANGLE = -CONE_ANGLE
+    CONE_TYPE = 'inward'
+FIRST_LAYER_HEIGHT = settings['firstLayerHeight'] # moves all the gcode up to this height. Use also for stacking
+X_SHIFT = settings['xShift'] # moves your gcode away from the origin into the center of the bed (usually bed size / 2)
+Y_SHIFT = settings['yShift']
+AUTO_SHIFT = settings['autoShift'] # determine x, y shift and layer height automatically
+CUT_SKIRT = settings['cutSkirt'] # cut out 3d print skirt
+USE_FIRST_LAYER_COMMAND = settings['useFirstLayerCommand'] # used for auto_shift and for start_gcode 
 
 
 def insert_Z(row, z_value):
@@ -98,7 +109,41 @@ def compute_angle_radial(x_old, y_old, x_new, y_new, inward_cone):
     return angle
 
 
+def pretransform(data, x_shift, y_shift):
+    new_data = []
+    pattern_X = r'X[-0-9]*[.]?[0-9]*'
+    pattern_Y = r'Y[-0-9]*[.]?[0-9]*'
+    pattern_Z = r'Z[-0-9]*[.]?[0-9]*'
+    pattern_E = r'E[-0-9]*[.]?[0-9]*'
+    pattern_G = r'\AG[0123] '
 
+    for row in data:
+
+        x_match = re.search(pattern_X, row)
+        y_match = re.search(pattern_Y, row)
+        z_match = re.search(pattern_Z, row)
+        g_match = re.search(pattern_G, row)
+
+        if g_match is None:
+            new_data.append(row)
+
+        else:
+            if row[1] == '2' or row[1] == '3':
+                raise Exception("Arc moves not supported!")
+            
+            if x_match is not None:
+                x_val = round(float(x_match.group(0).replace('X', '')) - x_shift)
+                row = re.sub(pattern_X, 'X' + str(x_val), row)
+            if y_match is not None:
+                y_val = round(float(y_match.group(0).replace('Y', '')) - y_shift)
+                row = re.sub(pattern_Y, 'Y' + str(y_val), row)
+            if z_match is not None:
+                z_val = float(z_match.group(0).replace('Z', ''))
+                row = re.sub(pattern_Z, 'Z' + str(z_val), row)
+
+            new_data.append(row)
+            
+    return new_data
 
 
 def compute_U_values(angle_array):
@@ -170,7 +215,7 @@ def backtransform_data_radial(data, cone_type, maximal_length, cone_angle_rad):
     pattern_Y = r'Y[-0-9]*[.]?[0-9]*'
     pattern_Z = r'Z[-0-9]*[.]?[0-9]*'
     pattern_E = r'E[-0-9]*[.]?[0-9]*'
-    pattern_G = r'\AG[1] '
+    pattern_G = r'\AG[01] '
 
     x_old, y_old = 0, 0
     x_new, y_new = 0, 0
@@ -290,7 +335,7 @@ def translate_data(data, cone_type, translate_x, translate_y, z_desired, e_paral
     pattern_Y = r'Y[-0-9]*[.]?[0-9]*'
     pattern_Z = r'Z[-0-9]*[.]?[0-9]*'
     pattern_E = r'E[-0-9]*[.]?[0-9]*'
-    pattern_G = r'\AG[1] '
+    pattern_G = r'\AG[0123] '
     z_initialized = False
     u_val = 0.0
 
@@ -318,6 +363,9 @@ def translate_data(data, cone_type, translate_x, translate_y, z_desired, e_paral
             new_data.append(row)
 
         else:
+            if row[1] == '2' or row[1] == '3':
+                raise Exception("Arc moves not supported!")
+            
             if x_match is not None:
                 x_val = round(float(x_match.group(0).replace('X', '')) + translate_x - (e_parallel * np.cos(u_val)) + (e_perpendicular * np.sin(u_val)), 3)
                 row = re.sub(pattern_X, 'X' + str(x_val), row)
@@ -366,13 +414,80 @@ def backtransform_file(path, cone_type, maximal_length, angle_comp, x_shift, y_s
 
     with open(path, 'r') as f_gcode:
         data = f_gcode.readlines()
-    data_bt = backtransform_data(data, cone_type, maximal_length, cone_angle_rad)
+    
+    if CUT_SKIRT:
+        try: # PrusaSlicer
+            index1 = data.index(';TYPE:Skirt/Brim\n') + 1
+            index2 = data.index(';TYPE:External perimeter\n', index1)
+            data = data[0:index1] + data[index2:]
+        except:
+            pass
+        try: # Cura
+            index1 = data.index(';TYPE:SKIRT\n') + 1
+            index2 = data.index(';TYPE:WALL-OUTER\n', index1) - 2
+            data = data[0:index1] + data[index2:]
+        except:
+            pass
+    
+    if USE_FIRST_LAYER_COMMAND:
+        try: # Prusa slicer
+            first_layer_command_index = data.index(';LAYER_CHANGE\n') + 1
+            start_print_command_index = data.index(';TYPE:External perimeter\n', first_layer_command_index) + 1
+        except:
+            pass
+        try: # Cura
+            first_layer_command_index = data.index(';LAYER:0\n') + 1
+            start_print_command_index = data.index(';TYPE:WALL-OUTER\n', first_layer_command_index) + 1
+        except:
+            pass
+        
+    
+    if AUTO_SHIFT:
+        x_shift_new = '-'
+        y_shift_new = '-'
+        z_desired_new = '-'
+        if not USE_FIRST_LAYER_COMMAND:
+            raise Exception('useFirstLayerCommand must be ON with autoShift')
+        x_positions = []
+        y_positions = []
+        for i in data[start_print_command_index:start_print_command_index + 10]:
+            line = i.split()
+            if (line[0] == 'G0' or line[0] == 'G1'):
+                for index in range(line.__len__()):
+                    if 'X' in line[index]: x_positions.append(float(line[index][1:]))
+                    if 'Y' in line[index]: y_positions.append(float(line[index][1:]))
+                    if 'Z' in line[index] and z_desired_new == '-': z_desired_new = float(line[index][1:])
+        
+        if len(x_positions) * len(y_positions) == 0:
+            raise Exception("Exception: Couldn't find print position. Use manual xShift and yShift.")
+                    
+        x_shift_new = round(sum(x_positions) / len(x_positions), 3)
+        y_shift_new = round(sum(y_positions) / len(y_positions), 3)
+                    
+        if x_shift_new != '-' and y_shift_new != '-':
+            x_shift = x_shift_new
+            y_shift = y_shift_new
+            if z_desired_new != '-': z_desired = z_desired_new
+            print(f"X shift: {x_shift}, Y shift: {y_shift}, first layer height: {z_desired}")
+            
+            
+    if USE_FIRST_LAYER_COMMAND:
+        start_print_command_index = start_print_command_index
+        start_gcode = ''.join(data[0 : start_print_command_index])
+        data = data[start_print_command_index :]
+    
+    data_bt = pretransform(data, x_shift, y_shift)
+    data_bt = backtransform_data(data_bt, cone_type, maximal_length, cone_angle_rad)
     data_bt_string = ''.join(data_bt)
     data_bt = [row + ' \n' for row in data_bt_string.split('\n')]
     data_bt = translate_data(data_bt, cone_type, x_shift, y_shift, z_desired, e_parallel, e_perpendicular)
     data_bt_string = ''.join(data_bt)
+    
+    if USE_FIRST_LAYER_COMMAND:
+        data_bt_string = start_gcode + data_bt_string
+        
 
-    path_write = re.sub(r'gcodes', 'gcodes_backtransformed', path)
+    path_write = re.sub(r'gcodes', FOLDER_NAME_BACKTRANSFORMED, path)
     path_write = re.sub(r'.gcode', '_bt_' + cone_type + '_' + angle_comp + '.gcode', path_write)
     print(path_write)
     with open(path_write, 'w+') as f_gcode_bt:
