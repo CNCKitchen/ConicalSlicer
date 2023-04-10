@@ -132,10 +132,10 @@ def pretransform(data, x_shift, y_shift):
                 raise Exception("Arc moves not supported!")
             
             if x_match is not None:
-                x_val = round(float(x_match.group(0).replace('X', '')) - x_shift)
+                x_val = round(float(x_match.group(0).replace('X', '')) - x_shift, 3)
                 row = re.sub(pattern_X, 'X' + str(x_val), row)
             if y_match is not None:
-                y_val = round(float(y_match.group(0).replace('Y', '')) - y_shift)
+                y_val = round(float(y_match.group(0).replace('Y', '')) - y_shift, 3)
                 row = re.sub(pattern_Y, 'Y' + str(y_val), row)
             if z_match is not None:
                 z_val = float(z_match.group(0).replace('Z', ''))
@@ -424,7 +424,7 @@ def backtransform_file(path, cone_type, maximal_length, angle_comp, x_shift, y_s
             pass
         try: # Cura
             index1 = data.index(';TYPE:SKIRT\n') + 1
-            index2 = data.index(';TYPE:WALL-OUTER\n', index1) - 2
+            index2 = data.index(';TYPE:WALL-OUTER\n', index1) - 3
             data = data[0:index1] + data[index2:]
         except:
             pass
@@ -437,7 +437,7 @@ def backtransform_file(path, cone_type, maximal_length, angle_comp, x_shift, y_s
             pass
         try: # Cura
             first_layer_command_index = data.index(';LAYER:0\n') + 1
-            start_print_command_index = data.index(';TYPE:WALL-OUTER\n', first_layer_command_index) + 1
+            start_print_command_index = data.index(';TYPE:WALL-OUTER\n', first_layer_command_index) - 1
         except:
             pass
         
@@ -497,7 +497,6 @@ def backtransform_file(path, cone_type, maximal_length, angle_comp, x_shift, y_s
     return None
 
 starttime = time.time()
-backtransform_file(path=FOLDER_NAME + FILE_NAME, cone_type=CONE_TYPE, maximal_length=0.5, angle_comp='radial', x_shift=X_SHIFT, y_shift=Y_SHIFT,
-                   cone_angle_deg=CONE_ANGLE, z_desired=FIRST_LAYER_HEIGHT, e_parallel=0, e_perpendicular=0)
+backtransform_file(path=FOLDER_NAME + FILE_NAME, cone_type=CONE_TYPE, maximal_length=0.5, angle_comp='radial', x_shift=X_SHIFT, y_shift=Y_SHIFT, cone_angle_deg=CONE_ANGLE, z_desired=FIRST_LAYER_HEIGHT, e_parallel=0, e_perpendicular=0)
 endtime = time.time()
 print('GCode translated, time used:', endtime - starttime)
