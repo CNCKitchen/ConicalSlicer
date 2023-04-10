@@ -1,0 +1,16 @@
+{
+    "modelName" : "1.stl",
+    "gcodeName" : "1.gcode",
+    "modelFolder" : "./",
+    "gcodeFolder" : "./",
+    "modelTransformedFolder" : "./",
+    "gcodeBacktransformedFolder" : "./",
+    "coneAngle" : 20,
+    "refinement" : 1,
+    "firstLayerHeight" : 0.2,
+    "xShift" : 0,
+    "yShift" : 0,
+    "autoShift" : true,
+    "cutSkirt" : true,
+    "useFirstLayerCommand" : true
+}

@@ -1,18 +1,25 @@
 import numpy as np
 from stl import mesh
 import time
-
+import json
 
 #-----------------------------------------------------------------------------------------
 # Transformation Settings
 #-----------------------------------------------------------------------------------------
-
-FILE_NAME = 'tower_01_-20'                       # Filename without extension
-FOLDER_NAME_UNTRANSFORMED = 'stl/'
-FOLDER_NAME_TRANSFORMED = 'stl_transformed/'    # Make sure this folder exists
-CONE_ANGLE = 16                                 # Transformation angle
-REFINEMENT_ITERATIONS = 1                       # refinement iterations of the stl. 2-3 is a good start for regular stls. If its already uniformaly fine, use 0 or 1. High number cause huge models and long script runtimes
-TRANSFORMATION_TYPE = 'outward'                 # type of the cone: 'inward' & 'outward'
+with open('settings.json', 'r') as f:
+    settings = json.load(f)
+    
+FILE_NAME = settings['modelName'] # Filename including extension
+if FILE_NAME[-4:] != '.stl':
+    raise Exception("Model not supported. Must be .stl")
+FOLDER_NAME_UNTRANSFORMED = settings['modelFolder']
+FOLDER_NAME_TRANSFORMED = settings['modelTransformedFolder'] # Make sure this folder exists
+CONE_ANGLE = settings["coneAngle"] # transformation angle, negative for inward
+REFINEMENT_ITERATIONS = settings['refinement'] # refinement iterations of the stl. 2-3 is a good start for regular stls. If its already uniformaly fine, use 0 or 1. High number cause huge models and long script runtimes
+CONE_TYPE = 'outward'
+if CONE_ANGLE < 0:
+    CONE_ANGLE = -CONE_ANGLE
+    CONE_TYPE = 'inward'
 
 
 def transformation_kegel(points, cone_angle_rad, cone_type):
@@ -105,7 +112,7 @@ def transformation_STL_file(path, cone_type, cone_angle_deg, nb_iterations):
     return my_mesh_transformed
 
 startzeit = time.time()
-transformed_STL = transformation_STL_file(path=FOLDER_NAME_UNTRANSFORMED + FILE_NAME + '.stl', cone_type=TRANSFORMATION_TYPE, cone_angle_deg=CONE_ANGLE, nb_iterations=REFINEMENT_ITERATIONS)
-transformed_STL.save(FOLDER_NAME_TRANSFORMED + FILE_NAME + '_' + TRANSFORMATION_TYPE + '_' + str(CONE_ANGLE) + 'deg_transformed.stl')
+transformed_STL = transformation_STL_file(path=FOLDER_NAME_UNTRANSFORMED + FILE_NAME, cone_type=CONE_TYPE, cone_angle_deg=CONE_ANGLE, nb_iterations=REFINEMENT_ITERATIONS)
+transformed_STL.save(FOLDER_NAME_TRANSFORMED + FILE_NAME + '_' + CONE_TYPE + '_' + str(CONE_ANGLE) + 'deg_transformed.stl')
 endzeit = time.time()
 print('Transformation time:', endzeit - startzeit)
